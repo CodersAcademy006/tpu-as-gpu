@@ -27,7 +27,12 @@ def main():
     input_features = inputs.input_features.to(device)
 
     start = time.time()
-    generated_ids = model.generate(input_features)
+    # min_new_tokens guards against a real eager-vs-XLA divergence: short
+    # or silent audio can decode to a 1-token sequence, and transformers'
+    # own segment-retrieval code does a negative-index slice on it that
+    # eager PyTorch clamps silently but torch_xla's compiled slicing
+    # throws on. See research/prior_art.md #7.
+    generated_ids = model.generate(input_features, min_new_tokens=5)
     xm.mark_step()
     elapsed = time.time() - start
 

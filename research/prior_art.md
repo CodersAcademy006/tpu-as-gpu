@@ -140,6 +140,48 @@ or relying on whatever the host notebook platform preinstalls) — tracked
 as an open question, not a SCOPE.md row (it's an installation/environment
 gap, not a GPU-only code pattern).
 
+## 7. Whisper on real TPU: ran end to end, hit a real eager-vs-XLA slicing
+   divergence in `transformers` itself
+
+`examples/torch_xla/whisper_tpu.py` (`openai/whisper-base`) run on the same
+Colab TPU v5e-1 session as §6, 2026-10-08. Full result in
+`results/colab_run_2026-10-08.md`.
+
+First call failed in `transformers`' own
+`WhisperGenerationMixin._retrieve_segment` (not our code):
+
+```
+single_timestamp_ending = timestamp_tokens[-2:].tolist() == [False, True]
+RuntimeError: Value out of range (expected to be in range of [-1, 0], but got -2)
+```
+
+Root cause, confirmed not an environment issue: the test input (a 2s pure
+440Hz sine tone, not real speech) decoded to a degenerate 1-token
+`seek_sequence`. In eager PyTorch, `tensor[-2:]` on a length-1 tensor
+silently clamps and returns the whole tensor — standard Python/NumPy slice
+semantics. Under `torch_xla`'s compiled execution, the same negative-start
+slice throws instead of clamping. This is a genuine GPU(eager)-vs-TPU(XLA)
+semantic divergence, surfaced by real third-party code
+(`transformers`'s own generation loop) hitting a degenerate edge case, not
+something contrived to prove a point. Passing `min_new_tokens=5` to force
+a longer generated sequence avoided the degenerate case and let generation
+complete (text was still garbage — `"you you you you you"` — expected,
+since the input wasn't real speech, that's an input-quality artifact, not
+a correctness bug).
+
+Doesn't get its own SCOPE.md row — it's a transformers-library-internal
+edge case triggered by a specific (degenerate) input shape, not a GPU-only
+*pattern* like the rest of Category B. Worth remembering if any future row
+hits an unexplained XLA slicing error: check whether eager would have
+silently clamped where XLA throws.
+
+Also a real, quantified data point for SCOPE row B1 (growing KV cache
+recompiles): first-call `generate()` took 253.74s — almost entirely XLA
+compile time for the autoregressive generation loop, the exact cost
+`StaticKVCache` exists to avoid. Not yet A/B'd against a fixed-buffer
+generation loop in this repo — that comparison is the natural next
+Category A/Whisper follow-up, not done this session.
+
 ## What this changes in `SCOPE.md`
 
 - Row A2 (fused attention): has a concrete, shipped answer now — Splash

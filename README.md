@@ -51,14 +51,16 @@ pattern repeats within a group. Each row there has a matching
 
 ## Status
 
-As of 2026-10-08: Categories B (static-shape) and H (device
-placement/seeding) are **verified on real TPU hardware** — `src/tpu_as_gpu/`
-run against actual `xla:0` tensors on a Colab TPU v5e-1, see
-`results/colab_run_2026-10-08.md`. Category G is a documented pattern, not
-code (`DEBUGGING.md`). Category D (precision) is dispatch-only, not yet
-exercised in a real training loop. Whisper transcription port
-(`examples/torch_xla/whisper_tpu.py`) is scaffolded, not yet run on real TPU
-hardware. Category A rows have 2 upstream solutions identified (Splash
+As of 2026-10-08: Whisper transcription (`examples/torch_xla/whisper_tpu.py`,
+the repo's original motivating use case) **ran end to end on real TPU
+hardware** — Colab v5e-1, see `results/colab_run_2026-10-08.md` and
+`research/prior_art.md` §7 for a real eager-vs-XLA slicing divergence hit
+and fixed along the way. Categories B (static-shape) and H (device
+placement/seeding) are also **verified on real TPU hardware** —
+`src/tpu_as_gpu/` run against actual `xla:0` tensors on the same session.
+Category G is a documented pattern, not code (`DEBUGGING.md`). Category D
+(precision) is dispatch-only, not yet exercised in a real training loop.
+Category A's remaining rows have 2 upstream solutions identified (Splash
 Attention, Ragged Paged Attention — see `research/prior_art.md`) but not yet
 adopted. Categories C/E/F are untouched — they need real TPU hardware to
 measure (profiling, pipeline throughput) or an upstream library to adopt

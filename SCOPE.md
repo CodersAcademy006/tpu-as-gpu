@@ -1,13 +1,14 @@
 # Scope: GPU-only processes to port to TPU
 
-**29 rows total (2026-10-08): 10 done / 1 in progress / 3 solution
-identified, not adopted / 1 wontfix / 14 not started.**
-Done = B (5/5), D (2/2), G (1/1), H (2/2). B1-B4 and H1-H2 are now
-**verified on real TPU hardware** (Colab, TPU v5e-1, 2026-10-08 — see
+**29 rows total (2026-10-08): 11 done / 3 solution identified, not adopted
+/ 1 wontfix / 14 not started.**
+Done = A1/Whisper, B (5/5), D (2/2), G (1/1), H (2/2). A1, B1-B4, and H1-H2
+are **verified on real TPU hardware** (Colab, TPU v5e-1, 2026-10-08 — see
 `results/colab_run_2026-10-08.md`); D1-D2 are dispatch-only (the pick is
 right, the loop-level behavior it feeds into isn't exercised by this run).
-Not started = all of C/E/F plus 6 of A's 11 rows; those need either real
-hardware to measure or a larger adoption effort than a dispatch function.
+Not started = all of C/E/F plus 6 of A's remaining 10 rows; those need
+either real hardware to measure or a larger adoption effort than a
+dispatch function.
 
 Everything below works on a normal NVIDIA GPU and either breaks, doesn't
 exist, or silently falls back to CPU on a TPU. Grouped by *why* it's broken,
@@ -39,7 +40,7 @@ different implementation of the same idea," never "port the kernel."
 
 | Process | GPU library | TPU replacement | Status |
 |---|---|---|---|
-| Whisper/speech-to-text inference | CTranslate2 (faster-whisper) | `transformers` Whisper on torch_xla | in progress (`torch_xla/whisper_tpu.py`) |
+| Whisper/speech-to-text inference | CTranslate2 (faster-whisper) | `transformers` Whisper on torch_xla | done, **verified on real TPU** (`examples/torch_xla/whisper_tpu.py`, Colab v5e-1 2026-10-08 — see `research/prior_art.md` §7 for a real eager-vs-XLA slicing gotcha hit along the way, and the 253.74s first-compile cost as a live data point for row B1) |
 | Fused attention | FlashAttention / FlashAttention-2 | **Splash Attention** — JAX's FlashAttention equivalent, built on Pallas, already lands in JAX itself. See `research/prior_art.md` §3 | not started (solution identified, needs adopting) |
 | Memory-efficient attention | xformers | same as Splash Attention row | not started (solution identified, needs adopting) |
 | LLM inference serving w/ paged KV cache | vLLM (CUDA PagedAttention) | **Ragged Paged Attention v3** inside vLLM's TPU backend (`tpu-inference`), shipped and open source. See `research/prior_art.md` §4 | not started (solution identified, needs adopting) |
