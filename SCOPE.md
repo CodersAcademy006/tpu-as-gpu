@@ -1,16 +1,16 @@
 # Scope: GPU-only processes to port to TPU
 
-**29 rows total (2026-10-08): 16 done / 3 solution identified, not adopted
-/ 1 wontfix / 9 not started.**
-Done = A1/Whisper, B (5/5), D (2/2), E (3/3), F (2/2), G (1/1), H (2/2).
-A1, B1-B4, E1/E3, F1, and H1-H2
-are **verified on real TPU hardware** (Colab, TPU v5e-1, 2026-10-08 — see
+**29 rows total (2026-10-08): 17 done / 3 solution identified, not adopted
+/ 1 wontfix / 8 not started.**
+Done = A1/Whisper, A6/quantization, B (5/5), D (2/2), E (3/3), F (2/2),
+G (1/1), H (2/2). A1, A6, B1-B4, E1/E3, F1, and H1-H2 are **verified on
+real TPU hardware** (Colab, TPU v5e-1, 2026-10-08 — see
 `results/colab_run_2026-10-08.md`); D1-D2 are dispatch-only (the pick is
 right, the loop-level behavior it feeds into isn't exercised by this run).
 Not started = all of C (3, needs real multi-device hardware, not available
 this session — a single-core v5e-1 isn't enough to test collectives) plus
-6 of A's remaining 10 rows (quantization, custom kernels, fp8 — each a
-standalone adoption effort, not a dispatch function).
+5 of A's remaining rows (8-bit optimizers, custom kernels, fp8, Triton —
+each a standalone adoption effort, not a dispatch function).
 
 Everything below works on a normal NVIDIA GPU and either breaks, doesn't
 exist, or silently falls back to CPU on a TPU. Grouped by *why* it's broken,
@@ -47,8 +47,8 @@ different implementation of the same idea," never "port the kernel."
 | Memory-efficient attention | xformers | same as Splash Attention row | not started — same blocker as the row above |
 | LLM inference serving w/ paged KV cache | vLLM (CUDA PagedAttention) | **Ragged Paged Attention v3** inside vLLM's TPU backend (`tpu-inference`), shipped and open source. See `research/prior_art.md` §4 | not started — same Mosaic blocker expected (inferred, not independently re-tested — see `research/prior_art.md` §8) |
 | Quantized local inference | llama.cpp / GGUF | no TPU path at all — needs re-export to a TPU-native format or a different runtime | not started |
-| 4-bit/8-bit quantization | bitsandbytes | no TPU path — needs `optax`/XLA-native quantization or skip quantization on TPU | not started |
-| 8-bit optimizers (Adam8bit, etc.) | bitsandbytes | standard `optax`/torch_xla optimizer, no 8-bit equivalent on TPU | not started |
+| 4-bit/8-bit quantization | bitsandbytes | **AQT** (`google/aqt`, pip `aqtp`) — JAX-native quantized `dot_general`. See `research/prior_art.md` §9 | done, **verified on real TPU** (`tpu_as_gpu.quantization.quantized_matmul`, int8, 0.91% max rel. error vs fp32) — JAX only, no torch_xla-native path identified yet |
+| 8-bit optimizers (Adam8bit, etc.) | bitsandbytes | standard `optax`/torch_xla optimizer, no 8-bit equivalent on TPU | not started — AQT (row above) is activation/weight quantization, not optimizer-state compression; a different problem, not solved by the same library |
 | Custom CUDA ops (NMS, ROI align, deformable conv) | torchvision CUDA kernels | CPU fallback (slow) or XLA-native reimplementation | not started |
 | Arbitrary custom CUDA extensions | `torch.utils.cpp_extension` | full rewrite as XLA op / Pallas kernel, case by case | not started |
 | fp8 training | NVIDIA Transformer Engine (Hopper-only) | no equivalent library — TPU has its own fp8 path, different API | not started |

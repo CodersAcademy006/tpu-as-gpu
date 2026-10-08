@@ -16,10 +16,13 @@ framework they're written in.
 
 ```bash
 pip install -e ".[dev]"
+# quantized_matmul needs AQT (JAX-only):
+pip install -e ".[quantization]"
 ```
 
 ```python
 from tpu_as_gpu import get_torch_device, seed_everything, where, bucket_length, DeferredSync, StaticKVCache
+from tpu_as_gpu import get_memory_info, clear_cache, quantized_matmul
 ```
 
 ## Framework support matrix
@@ -51,21 +54,29 @@ pattern repeats within a group. Each row there has a matching
 
 ## Status
 
-As of 2026-10-08: 16/29 `SCOPE.md` rows are done — Whisper transcription
+As of 2026-10-08: 17/29 `SCOPE.md` rows are done — Whisper transcription
 (`examples/torch_xla/whisper_tpu.py`, the repo's original motivating use
-case), all of B (static-shape), E (profiling/memory), F (data loading), G
-(debugging), H (device placement/seeding), and D (precision, dispatch-only
-— not yet exercised in a real training loop). A1, B1-B4, E1/E3, F1, and
-H1-H2 are **verified on real TPU hardware** (Colab v5e-1, see
+case), int8 quantization via AQT, all of B (static-shape), E
+(profiling/memory), F (data loading), G (debugging), H (device
+placement/seeding), and D (precision, dispatch-only — not yet exercised in
+a real training loop). A1, A6/quantization, B1-B4, E1/E3, F1, and H1-H2 are
+**verified on real TPU hardware** (Colab v5e-1, see
 `results/colab_run_2026-10-08.md`); E2/F2/G are documented conventions, not
 code (`PERFORMANCE.md`, `DEBUGGING.md`) — there's nothing to wrap when the
-native API is already the fix. Category A's remaining attention/KV-cache
-rows have the right upstream solution identified (Splash Attention, Ragged
-Paged Attention) but adoption is currently blocked by a real environment
-bug, not our code — a Mosaic IR version mismatch between this session's
-`jax`/`jaxlib` and `libtpu` (`research/prior_art.md` §8). Category C
-(distributed) needs real multi-device hardware, not available this
-session (single-core v5e-1). The same hardware run also surfaced a real
+native API is already the fix. The same session also verified the basic
+premise of the whole repo for the first time: a model can actually be
+*trained* on TPU (forward + backward + optimizer step), not just run
+inference — see `examples/torch_xla/train_infer_demo.py`. Category A's
+remaining attention/KV-cache rows have the right upstream solution
+identified (Splash Attention, Ragged Paged Attention) but adoption is
+currently blocked by a real environment bug, not our code — a Mosaic IR
+version mismatch between this session's `jax`/`jaxlib` and `libtpu`
+(`research/prior_art.md` §8). Category C (distributed) needs real
+multi-device hardware, not available this session (single-core v5e-1). The
+mission beyond the 29 rows — any model, not just the ones already ported,
+should get TPU support by calling into `tpu_as_gpu` — is tracked as an
+open backlog in issue #30, starting with whichever audio-to-video model
+gets named. The same hardware run also surfaced a real
 environment gap: a plain `pip install tensorflow` has no TPU kernels on a
 Colab TPU VM runtime, even with a matched `libtpu` — see
 `research/prior_art.md` §6. Real-hardware numbers land in `results/` once

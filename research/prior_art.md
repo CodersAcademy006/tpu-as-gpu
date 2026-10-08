@@ -239,6 +239,52 @@ should happen on a fresh environment where `jax`/`jaxlib`/`libtpu` can be
 pinned to mutually compatible versions from the start, rather than
 patching a running session.
 
+## 9. Quantization on TPU: AQT picked and verified on real hardware
+
+SCOPE row A6 (4-bit/8-bit quantization): `bitsandbytes` is CUDA-only, no
+TPU path, no near-term fix. The TPU-native answer is **AQT**
+(`google/aqt`, PyPI package `aqtp`) — quantized `jax.lax.dot_general`,
+built and maintained by Google specifically for TPU training/inference,
+the closest thing to a direct `bitsandbytes` equivalent that actually runs
+on this hardware.
+
+Picked over alternatives considered: `optax` has no quantization support
+of its own (just optimizers); `torchao` (PyTorch's own quantization
+library) targets CUDA, no TPU/XLA backend found. No PyTorch/torch_xla-
+native quantization path was found at all — AQT is JAX-only, which means
+Category A's quantization story currently forces a JAX dependency even
+for an otherwise-torch_xla workload. Flagging this as a second data point
+for the open `torch_xla`-vs-`torchax` decision (§2): `torchax` would let a
+PyTorch model reach AQT directly, `torch_xla` wouldn't.
+
+**Verified on real TPU hardware** (Colab v5e-1, 2026-10-08):
+`aqt.jax.v2.aqt_dot_general.dot_general_make(lhs_bits=8, rhs_bits=8)` run
+on a 512×256 @ 256×512 matmul, max relative error 0.91% vs the fp32
+reference — a real, measured number, not a claim from AQT's own docs.
+Wrapped as `tpu_as_gpu.quantization.quantized_matmul`, full result in
+`results/colab_run_2026-10-08.md`.
+
+**Does not solve SCOPE row A7** (8-bit optimizers, `Adam8bit`-style) —
+that's optimizer*-state* compression (the optimizer's own momentum/
+variance buffers stored at lower precision), a different problem from
+quantizing activations/weights for the forward/backward matmul. AQT
+doesn't address it; still an open row.
+
+## 10. Train-then-infer lifecycle verified on real TPU hardware
+
+Separately from any single SCOPE row: confirmed the basic premise of the
+whole repo — that a model can actually be *trained* on TPU via
+`torch_xla`, not just run inference — since nothing before this session
+had exercised a real backward pass + optimizer step on real hardware.
+
+A 2-layer MLP (`nn.Linear(10,32) -> ReLU -> nn.Linear(32,2)`), 5 SGD steps
+on a Colab v5e-1: loss went 0.705 -> 0.692 (monotonic decrease, confirming
+gradients actually flowed and the optimizer actually updated weights, not
+just that the code ran without erroring), then `model.eval()` +
+`torch.no_grad()` inference on the same device in the same process.
+Example: `examples/torch_xla/train_infer_demo.py`. Full numbers in
+`results/colab_run_2026-10-08.md`.
+
 ## What this changes in `SCOPE.md`
 
 - Row A2 (fused attention): has a concrete, shipped answer now — Splash

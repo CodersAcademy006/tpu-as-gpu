@@ -2,7 +2,7 @@
 
 | Dir | What | Run where |
 |---|---|---|
-| `torch_xla/`, `jax/`, `tensorflow/` | Per-framework smoke tests + the Whisper benchmark | Any TPU notebook, imports `tpu_as_gpu` from the installed package |
+| `torch_xla/`, `jax/`, `tensorflow/` | Per-framework smoke tests + the Whisper benchmark + `train_infer_demo.py` (train a model, then infer with it, same device) | Any TPU notebook, imports `tpu_as_gpu` from the installed package |
 | `kaggle_verify.py` | Runs all of the above in one shot, writes `results/` | Kaggle TPU VM notebook, `pip install -e .` first |
 | `kaggle/` | Single self-contained script (`verify_kernel.py`) + `kernel-metadata.json` for `kaggle kernels push` | Kaggle, via the `kaggle` CLI — script kernels only upload one file, so the library is inlined rather than imported |
 | `colab/` | `tpu_as_gpu_verify.ipynb`, same checks as `kaggle/verify_kernel.py` | Colab, Runtime > Change runtime type > TPU, then Run all |

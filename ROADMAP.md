@@ -8,14 +8,20 @@ contribution, not just the taxonomy.
 
 Port every GPU-only process to TPU, one row at a time, tracked as a GitHub
 issue each. This is the raw material: what breaks, why, and the working fix
-for each case. Status (2026-10-08): 16/29 done (A1/Whisper, B, D, E, F, G,
-H), with A1, B1-B4, E1/E3, F1, and H1-H2 **verified on real TPU hardware**
-(Colab v5e-1, `results/colab_run_2026-10-08.md`) — D1-D2 are dispatch-only,
-not yet exercised in a real loop; E2/F2/G are documented conventions, not
-code. 3/29 (Splash Attention x2, Ragged Paged Attention) have the right
-upstream solution identified but adoption is blocked by a real Mosaic
-version-skew bug, not our code (`research/prior_art.md` §8). 9/29 not
-started (6 of A's remaining rows, all of C — needs multi-device hardware).
+for each case. Status (2026-10-08): 17/29 done (A1/Whisper, A6/quantization,
+B, D, E, F, G, H), with A1, A6, B1-B4, E1/E3, F1, and H1-H2 **verified on
+real TPU hardware** (Colab v5e-1, `results/colab_run_2026-10-08.md`) —
+D1-D2 are dispatch-only, not yet exercised in a real loop; E2/F2/G are
+documented conventions, not code. Also verified, separately from any SCOPE
+row: a real train-then-infer cycle on TPU (`examples/torch_xla/
+train_infer_demo.py`), the first backward-pass+optimizer-step proof in
+this repo. 3/29 (Splash Attention x2, Ragged Paged Attention) have the
+right upstream solution identified but adoption is blocked by a real
+Mosaic version-skew bug, not our code (`research/prior_art.md` §8). 8/29
+not started (5 of A's remaining rows, all of C — needs multi-device
+hardware). Beyond the 29 rows: the real mission (any model, not just the
+ones already ported, gets TPU support automatically) is tracked as an
+open backlog in issue #30.
 
 ## Stage 2 — the auto-detect/auto-rewrite tool
 
