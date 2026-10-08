@@ -51,20 +51,21 @@ pattern repeats within a group. Each row there has a matching
 
 ## Status
 
-As of 2026-10-08: Whisper transcription (`examples/torch_xla/whisper_tpu.py`,
-the repo's original motivating use case) **ran end to end on real TPU
-hardware** — Colab v5e-1, see `results/colab_run_2026-10-08.md` and
-`research/prior_art.md` §7 for a real eager-vs-XLA slicing divergence hit
-and fixed along the way. Categories B (static-shape) and H (device
-placement/seeding) are also **verified on real TPU hardware** —
-`src/tpu_as_gpu/` run against actual `xla:0` tensors on the same session.
-Category G is a documented pattern, not code (`DEBUGGING.md`). Category D
-(precision) is dispatch-only, not yet exercised in a real training loop.
-Category A's remaining rows have 2 upstream solutions identified (Splash
-Attention, Ragged Paged Attention — see `research/prior_art.md`) but not yet
-adopted. Categories C/E/F are untouched — they need real TPU hardware to
-measure (profiling, pipeline throughput) or an upstream library to adopt
-(distributed), not just logic. The same hardware run also surfaced a real
+As of 2026-10-08: 16/29 `SCOPE.md` rows are done — Whisper transcription
+(`examples/torch_xla/whisper_tpu.py`, the repo's original motivating use
+case), all of B (static-shape), E (profiling/memory), F (data loading), G
+(debugging), H (device placement/seeding), and D (precision, dispatch-only
+— not yet exercised in a real training loop). A1, B1-B4, E1/E3, F1, and
+H1-H2 are **verified on real TPU hardware** (Colab v5e-1, see
+`results/colab_run_2026-10-08.md`); E2/F2/G are documented conventions, not
+code (`PERFORMANCE.md`, `DEBUGGING.md`) — there's nothing to wrap when the
+native API is already the fix. Category A's remaining attention/KV-cache
+rows have the right upstream solution identified (Splash Attention, Ragged
+Paged Attention) but adoption is currently blocked by a real environment
+bug, not our code — a Mosaic IR version mismatch between this session's
+`jax`/`jaxlib` and `libtpu` (`research/prior_art.md` §8). Category C
+(distributed) needs real multi-device hardware, not available this
+session (single-core v5e-1). The same hardware run also surfaced a real
 environment gap: a plain `pip install tensorflow` has no TPU kernels on a
 Colab TPU VM runtime, even with a matched `libtpu` — see
 `research/prior_art.md` §6. Real-hardware numbers land in `results/` once
@@ -98,5 +99,6 @@ examples/
   tensorflow/     # TF-on-TPU: smoke test (native support, no bridge needed)
 results/          # real-hardware run output, one file per run, empty until a run exists
 DEBUGGING.md      # how to debug traced/lazy tensor values on TPU
+PERFORMANCE.md    # profiling + data-loading conventions on TPU
 UNSUPPORTED_MLX.md  # why MLX is out of scope, permanently
 ```

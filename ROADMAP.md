@@ -8,12 +8,14 @@ contribution, not just the taxonomy.
 
 Port every GPU-only process to TPU, one row at a time, tracked as a GitHub
 issue each. This is the raw material: what breaks, why, and the working fix
-for each case. Status (2026-10-08): 11/29 done (A1/Whisper, B, D, G, H),
-with A1 and B1-B4/H1-H2 **verified on real TPU hardware** (Colab v5e-1,
-`results/colab_run_2026-10-08.md`) — D1-D2 are dispatch-only, not yet
-exercised in a real loop. 3/29 have an identified upstream solution not yet
-adopted (Splash Attention x2, Ragged Paged Attention — see
-`research/prior_art.md`), 14/29 not started.
+for each case. Status (2026-10-08): 16/29 done (A1/Whisper, B, D, E, F, G,
+H), with A1, B1-B4, E1/E3, F1, and H1-H2 **verified on real TPU hardware**
+(Colab v5e-1, `results/colab_run_2026-10-08.md`) — D1-D2 are dispatch-only,
+not yet exercised in a real loop; E2/F2/G are documented conventions, not
+code. 3/29 (Splash Attention x2, Ragged Paged Attention) have the right
+upstream solution identified but adoption is blocked by a real Mosaic
+version-skew bug, not our code (`research/prior_art.md` §8). 9/29 not
+started (6 of A's remaining rows, all of C — needs multi-device hardware).
 
 ## Stage 2 — the auto-detect/auto-rewrite tool
 

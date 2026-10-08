@@ -1,14 +1,16 @@
 # Scope: GPU-only processes to port to TPU
 
-**29 rows total (2026-10-08): 11 done / 3 solution identified, not adopted
-/ 1 wontfix / 14 not started.**
-Done = A1/Whisper, B (5/5), D (2/2), G (1/1), H (2/2). A1, B1-B4, and H1-H2
+**29 rows total (2026-10-08): 16 done / 3 solution identified, not adopted
+/ 1 wontfix / 9 not started.**
+Done = A1/Whisper, B (5/5), D (2/2), E (3/3), F (2/2), G (1/1), H (2/2).
+A1, B1-B4, E1/E3, F1, and H1-H2
 are **verified on real TPU hardware** (Colab, TPU v5e-1, 2026-10-08 — see
 `results/colab_run_2026-10-08.md`); D1-D2 are dispatch-only (the pick is
 right, the loop-level behavior it feeds into isn't exercised by this run).
-Not started = all of C/E/F plus 6 of A's remaining 10 rows; those need
-either real hardware to measure or a larger adoption effort than a
-dispatch function.
+Not started = all of C (3, needs real multi-device hardware, not available
+this session — a single-core v5e-1 isn't enough to test collectives) plus
+6 of A's remaining 10 rows (quantization, custom kernels, fp8 — each a
+standalone adoption effort, not a dispatch function).
 
 Everything below works on a normal NVIDIA GPU and either breaks, doesn't
 exist, or silently falls back to CPU on a TPU. Grouped by *why* it's broken,
@@ -87,16 +89,16 @@ control flow to avoid data-dependent branching.
 
 | Process | GPU tool | TPU equivalent | Status |
 |---|---|---|---|
-| Utilization/memory monitoring | `nvidia-smi`, `pynvml` | `torch_xla` metrics report / `xm.get_memory_info()`, or Cloud TPU profiler | not started |
-| Deep kernel profiling | Nsight Systems/Compute | XLA/TPU profiler (`torch_xla` or JAX profiler, different trace format) | not started |
-| Clearing allocator cache | `torch.cuda.empty_cache()` | no direct equivalent — XLA manages its own allocator differently | not started |
+| Utilization/memory monitoring | `nvidia-smi`, `pynvml` | `torch_xla` metrics report / `xm.get_memory_info()`, or Cloud TPU profiler | done, **verified on real TPU** (`tpu_as_gpu.profiling.get_memory_info`) |
+| Deep kernel profiling | Nsight Systems/Compute | XLA/TPU profiler (`torch_xla` or JAX profiler, different trace format) | done — documented pattern, not code, see `PERFORMANCE.md` |
+| Clearing allocator cache | `torch.cuda.empty_cache()` | no direct equivalent — XLA manages its own allocator differently | done, **verified on real TPU** (`tpu_as_gpu.profiling.clear_cache`, honestly returns `False` on XLA instead of pretending to clear anything) |
 
 ## F. Data loading pipeline conventions
 
 | Process | GPU convention | TPU convention | Status |
 |---|---|---|---|
-| Pinned-memory async transfer | `pin_memory=True`, `.to(device, non_blocking=True)` | `torch_xla.distributed.parallel_loader.MpDeviceLoader` instead | not started |
-| Preprocessing pipeline | arbitrary `DataLoader` + CPU workers, variable batch content | prefer pre-batched, fixed-shape input; `tf.data` is the most TPU-native option regardless of training framework | not started |
+| Pinned-memory async transfer | `pin_memory=True`, `.to(device, non_blocking=True)` | `torch_xla.distributed.parallel_loader.MpDeviceLoader` instead | done, **verified on real TPU** — no `tpu_as_gpu` wrapper needed, `MpDeviceLoader` is already the drop-in fix, see `PERFORMANCE.md` |
+| Preprocessing pipeline | arbitrary `DataLoader` + CPU workers, variable batch content | prefer pre-batched, fixed-shape input; `tf.data` is the most TPU-native option regardless of training framework | done — documented convention, not code, see `PERFORMANCE.md` |
 
 ## G. Debugging / dev workflow
 
@@ -113,9 +115,9 @@ control flow to avoid data-dependent branching.
 
 ## Priority order (suggested, not fixed)
 
-1. **A** (Whisper row is already in progress) — biggest payoff, each one unlocks a whole workload.
-2. **B, H, G** — done at the code level (`tpu_as_gpu` + `DEBUGGING.md`), still need real-TPU verification once hardware access is back.
-3. **C, D, E, F** — as they come up per-workload, needs real TPU hardware to measure (profiling, pipeline throughput) or adopt (distributed, precision).
+1. **A** — A1/Whisper done and verified. A2-A4 (Splash Attention, Ragged Paged Attention) blocked on a Mosaic version-skew bug (`research/prior_art.md` §8), needs a fresh environment with matched `jax`/`jaxlib`/`libtpu` to retry. Remaining 6 rows (quantization, custom kernels, fp8) are standalone adoption efforts, picked up as needed.
+2. **B, D, E, F, G, H** — done and mostly real-TPU-verified (D is dispatch-only). No further action needed unless a row's claim turns out wrong in practice.
+3. **C** — blocked on real multi-device hardware (this session only had a single-core v5e-1); revisit when multi-device access exists.
 
 ## Out of scope
 
