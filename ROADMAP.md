@@ -8,9 +8,12 @@ contribution, not just the taxonomy.
 
 Port every GPU-only process to TPU, one row at a time, tracked as a GitHub
 issue each. This is the raw material: what breaks, why, and the working fix
-for each case. Status: in progress, 1/29 (Whisper) has code, 2 more
-(Splash Attention, Ragged Paged Attention) have an identified upstream
-solution not yet adopted — see `research/prior_art.md`.
+for each case. Status (2026-10-08): 10/29 done at the code level (Categories
+B, D, G, H — all logic/dispatch fixes, CPU-tested, pending real-TPU
+verification once Kaggle hardware access is back), 1/29 (Whisper) scaffolded
+not yet run on hardware, 3/29 have an identified upstream solution not yet
+adopted (Splash Attention x2, Ragged Paged Attention — see
+`research/prior_art.md`), 14/29 not started.
 
 ## Stage 2 — the auto-detect/auto-rewrite tool
 

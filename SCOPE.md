@@ -1,5 +1,12 @@
 # Scope: GPU-only processes to port to TPU
 
+**29 rows total (2026-10-08): 10 done / 1 in progress / 3 solution
+identified, not adopted / 1 wontfix / 14 not started.**
+Done = B (5/5), D (2/2), G (1/1), H (2/2) — all code-level, CPU-tested,
+pending real-TPU verification. Not started = all of C/E/F plus 6 of A's 11
+rows; those need either real hardware to measure or a larger adoption
+effort than a dispatch function.
+
 Everything below works on a normal NVIDIA GPU and either breaks, doesn't
 exist, or silently falls back to CPU on a TPU. Grouped by *why* it's broken,
 not by framework, since the fix pattern is the same within a group. Each row
