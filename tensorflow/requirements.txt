@@ -1,0 +1,2 @@
+# Kaggle TPU VM notebooks ship TPU-enabled tensorflow already.
+# Verify with smoke_test.py before installing anything.

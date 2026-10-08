@@ -1,52 +1,59 @@
 # tpu-as-gpu
 
 Make Kaggle's free TPU run normal ML workloads the way a GPU does, instead of
-sitting idle because the workload only has a CUDA path.
+sitting idle because a given workload only has a CUDA path.
 
 ## Why
 
 `faster-whisper`/CTranslate2 (used for the Anchor Of Life transcription job)
 is CUDA-only. Kaggle's 2xT4 GPU quota covered that job, but the TPU quota
 went unused because nothing in that pipeline runs on XLA. This repo is the
-general fix: a reusable compat layer + benchmark workloads, so future Kaggle
-jobs can burn TPU hours instead of only GPU hours.
+general fix: per-framework helper code + benchmark workloads, so future
+Kaggle jobs can burn TPU hours instead of only GPU hours, whatever framework
+they're written in.
 
-## Approach
+## Framework support matrix
 
-`torch_xla` first. Keep model code as close to normal PyTorch as possible,
-swap the device to `xm.xla_device()`. Lower rewrite cost than a full JAX
-port. Fall back to JAX/Flax per-workload only if a specific op has no
-working XLA lowering in `torch_xla`.
+| Framework | TPU support | What's needed |
+|---|---|---|
+| JAX | Native, first-class | Just the right init order — `jax/` has a smoke test, no compat layer required |
+| TensorFlow | Native (`TPUStrategy`, oldest TPU support of any framework) | Cluster-resolver boilerplate — `tensorflow/` has a smoke test, no compat layer required |
+| PyTorch | Via `torch_xla` bridge | Real compat work — `torch_xla/` has the smoke test + the Whisper port |
+| MLX | **Not possible** | Metal-only framework, no XLA/TPU backend exists, no Apple roadmap for one — see `UNSUPPORTED_MLX.md`. Not a Kaggle issue, not fixable from this repo |
 
 ## First benchmark: Whisper transcription on TPU
 
 CTranslate2 has no XLA backend, so the port goes through
 `transformers.WhisperForConditionalGeneration` (pure PyTorch) running on an
-XLA device instead. `scripts/whisper_tpu.py` is the first real workload;
-`scripts/smoke_test.py` is the sanity check that runs before it (proves the
-TPU device is visible and a basic op/compile cycle works at all).
+XLA device instead — see `torch_xla/whisper_tpu.py`. Run
+`torch_xla/smoke_test.py` first on any fresh notebook; it proves the TPU
+device is visible and a basic op/compile cycle works before trusting
+anything heavier.
 
 ## Status
 
-Scaffolded 2026-10-08. Nothing benchmarked yet. Run `smoke_test.py` on a
-Kaggle TPU notebook first, before trying `whisper_tpu.py`.
+Scaffolded 2026-10-08. Nothing benchmarked on real TPU hardware yet.
 
 ## Running on Kaggle
 
-Kaggle's TPU VM notebooks ship `torch_xla` preinstalled (version pinned to
-match the notebook's `torch` build) — do not `pip install torch_xla`
-yourself, it will likely mismatch and break. Set accelerator to "TPU VM
-v3-8" in notebook settings, then:
+Kaggle's TPU VM notebooks ship `torch_xla`, `jax`, and `tensorflow` all
+preinstalled and version-matched to the notebook's runtime — do not
+`pip install` a different version of any of them, it will likely mismatch
+and break. Set accelerator to "TPU VM v3-8" in notebook settings, then run
+whichever framework's smoke test first:
 
 ```python
-!python scripts/smoke_test.py
-!python scripts/whisper_tpu.py --audio path/to/clip.wav
+!python torch_xla/smoke_test.py
+!python jax/smoke_test.py
+!python tensorflow/smoke_test.py
+!python torch_xla/whisper_tpu.py --audio path/to/clip.wav
 ```
 
 ## Structure
 
 ```
-scripts/smoke_test.py   # tiny matmul on xla device, proves device + compile work
-scripts/whisper_tpu.py  # Whisper transcription via transformers on xla device
-requirements.txt        # non-torch_xla deps only (transformers, librosa, etc.)
+torch_xla/   # PyTorch-on-TPU bridge: smoke test + Whisper transcription benchmark
+jax/         # JAX-on-TPU: smoke test (native support, no bridge needed)
+tensorflow/  # TF-on-TPU: smoke test (native support, no bridge needed)
+UNSUPPORTED_MLX.md  # why MLX is out of scope, permanently
 ```

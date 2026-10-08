@@ -1,0 +1,3 @@
+# Kaggle TPU VM notebooks typically ship a TPU-enabled jax already.
+# Verify with smoke_test.py before installing. If missing:
+#   pip install -U "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
