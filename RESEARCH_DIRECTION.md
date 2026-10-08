@@ -89,9 +89,17 @@ now have a concrete need behind them — not on a schedule, on a trigger.
   backward) isn't something Qwix's fake-quantization QAT reproduces, so
   this isn't a drop-in swap even once verified. `research/prior_art.md`
   §11.1.
-- Check what FP8 support (if any) this session's actual test hardware
-  (Colab v5e-1) has — TPU7x/Ironwood's native FP8 doesn't tell us anything
-  about v5e-1 specifically. `research/prior_art.md` §11.3.
 - Helion as a PyTorch-native alternative to hand-written Pallas for future
   Triton-equivalent kernel work — not attempted yet, just identified as
   the better entry point than raw Pallas. `research/prior_art.md` §11.4.
+
+## Follow-ups closed
+
+- **FP8 on v5e-1, checked (2026-10-08 Colab pass).** All four `jnp` fp8
+  dtypes (`float8_e4m3fn`, `float8_e5m2`, `float8_e4m3`, `float8_e3m4`)
+  compile and run a matmul on this session's actual hardware
+  (`results/colab_run_2026-10-08.md`). Narrower question still open: that
+  check doesn't distinguish a genuine hardware fp8 op from an upcast-
+  compute-cast-back emulation — would need an HLO dump or a bf16-vs-fp8
+  perf-scaling comparison to tell, not attempted. SCOPE.md's fp8 row
+  reflects this: "dtypes usable," not "native-fp8 confirmed."
