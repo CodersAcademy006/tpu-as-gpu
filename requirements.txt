@@ -1,0 +1,6 @@
+# torch_xla itself: do NOT list here. Kaggle TPU VM notebooks ship it
+# preinstalled, version-matched to their torch build — pip-installing a
+# different version breaks the XLA runtime.
+transformers>=4.44
+librosa>=0.10
+soundfile>=0.12
