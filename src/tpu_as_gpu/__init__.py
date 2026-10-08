@@ -1,5 +1,6 @@
 from .compat import DeferredSync, StaticKVCache, bucket_length, where
 from .device import device_kind, get_torch_device
+from .ops import nms
 from .precision import autocast_dtype, compile_backend
 from .profiling import clear_cache, get_memory_info
 from .quantization import quantized_matmul
@@ -12,6 +13,7 @@ __all__ = [
     "where",
     "get_torch_device",
     "device_kind",
+    "nms",
     "autocast_dtype",
     "compile_backend",
     "get_memory_info",

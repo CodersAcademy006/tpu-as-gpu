@@ -1,16 +1,20 @@
 # Scope: GPU-only processes to port to TPU
 
-**29 rows total (2026-10-08): 17 done / 3 solution identified, not adopted
-/ 1 wontfix / 8 not started.**
+**29 rows total (2026-10-08): 17 done / 1 in progress / 3 solution
+identified, not adopted / 1 wontfix / 7 not started.**
 Done = A1/Whisper, A6/quantization, B (5/5), D (2/2), E (3/3), F (2/2),
 G (1/1), H (2/2). A1, A6, B1-B4, E1/E3, F1, and H1-H2 are **verified on
 real TPU hardware** (Colab, TPU v5e-1, 2026-10-08 — see
 `results/colab_run_2026-10-08.md`); D1-D2 are dispatch-only (the pick is
 right, the loop-level behavior it feeds into isn't exercised by this run).
+In progress = the custom-CUDA-ops row: NMS shipped (`tpu_as_gpu.ops.nms`,
+**correctness-verified on CPU** against an independent pure-Python
+reference, 20 randomized cases, `tests/test_ops.py` — not yet run on real
+TPU hardware); ROI align and deformable conv, same row, not started.
 Not started = all of C (3, needs real multi-device hardware, not available
 this session — a single-core v5e-1 isn't enough to test collectives) plus
-5 of A's remaining rows (8-bit optimizers, custom kernels, fp8, Triton —
-each a standalone adoption effort, not a dispatch function).
+4 of A's remaining rows (8-bit optimizers, fp8, Triton, GGUF local
+inference — each a standalone adoption effort, not a dispatch function).
 
 Everything below works on a normal NVIDIA GPU and either breaks, doesn't
 exist, or silently falls back to CPU on a TPU. Grouped by *why* it's broken,
@@ -53,7 +57,7 @@ different implementation of the same idea," never "port the kernel."
 | Quantized local inference | llama.cpp / GGUF | no TPU path at all — needs re-export to a TPU-native format or a different runtime | not started |
 | 4-bit/8-bit quantization | bitsandbytes | **AQT** (`google/aqt`, pip `aqtp`) — JAX-native quantized `dot_general`. See `research/prior_art.md` §9. AQT is end-of-life upstream; **Qwix** (`google/qwix`) is Google's own replacement, confirmed real but not yet verified on our hardware — see §11.1 | done, **verified on real TPU** (`tpu_as_gpu.quantization.quantized_matmul`, int8, 0.91% max rel. error vs fp32) — JAX only, no torch_xla-native path identified yet. Qwix migration is a follow-up, not done — swapping a verified dep for an unverified one isn't justified yet |
 | 8-bit optimizers (Adam8bit, etc.) | bitsandbytes | standard `optax`/torch_xla optimizer, no 8-bit equivalent on TPU | not started — AQT (row above) is activation/weight quantization, not optimizer-state compression; a different problem, not solved by the same library |
-| Custom CUDA ops (NMS, ROI align, deformable conv) | torchvision CUDA kernels | CPU fallback (slow) or XLA-native reimplementation | not started |
+| Custom CUDA ops (NMS, ROI align, deformable conv) | torchvision CUDA kernels | CPU fallback (slow) or XLA-native reimplementation | in progress — **NMS done** (`tpu_as_gpu.ops.nms`, pure JAX, static-shape bool keep mask since a variable-length index output needs a dynamic shape — see Category B; correctness-verified on CPU against an independent reference, not yet run on real TPU hardware); ROI align/deformable conv not started |
 | Arbitrary custom CUDA extensions | `torch.utils.cpp_extension` | full rewrite as XLA op / Pallas kernel, case by case | not started |
 | fp8 training | NVIDIA Transformer Engine (Hopper-only) | generation-dependent, not a flat "no" — TPU7x/Ironwood has **native FP8 hardware** (confirmed, Google Cloud docs, §11.3); v4/v5p emulate it in software. Our test hardware (v5e-1) FP8 status not yet checked | not started — needs checking what this session's actual hardware (v5e-1) supports before picking a path |
 | Custom GPU kernels via Triton | OpenAI Triton | no mainstream TPU backend for Triton itself — options are hand-written Pallas (JAX), or **Helion** (PyTorch's kernel DSL, compiles to Pallas, real measured 838 TFLOPs flash-attention on TPU v7 — §11.4), more PyTorch-native than raw Pallas | not started |
@@ -125,7 +129,7 @@ are two ways to express the same underlying bound, not competing fixes.
 
 ## Priority order (suggested, not fixed)
 
-1. **A** — A1/Whisper and A6/quantization done and verified. A2-A4 (Splash Attention, Ragged Paged Attention) blocked on a Mosaic version-skew bug (`research/prior_art.md` §8), needs a fresh environment with matched `jax`/`jaxlib`/`libtpu` to retry. Remaining 5 rows (8-bit optimizers, custom CUDA ops, fp8, Triton/Helion, GGUF local inference) are standalone adoption efforts, picked up as needed.
+1. **A** — A1/Whisper and A6/quantization done and verified. Custom-ops row in progress (NMS CPU-verified, not yet real-TPU-run; ROI align/deformable conv not started). A2-A4 (Splash Attention, Ragged Paged Attention) blocked on a Mosaic version-skew bug (`research/prior_art.md` §8), needs a fresh environment with matched `jax`/`jaxlib`/`libtpu` to retry. Remaining 4 rows (8-bit optimizers, fp8, Triton/Helion, GGUF local inference) are standalone adoption efforts, picked up as needed.
 2. **B, D, E, F, G, H** — done and mostly real-TPU-verified (D is dispatch-only). No further action needed unless a row's claim turns out wrong in practice.
 3. **C** — blocked on real multi-device hardware (this session only had a single-core v5e-1); revisit when multi-device access exists.
 
