@@ -30,9 +30,20 @@ XLA device instead — see `torch_xla/whisper_tpu.py`. Run
 device is visible and a basic op/compile cycle works before trusting
 anything heavier.
 
+## Scope
+
+Full list of GPU-only processes we're porting is in [`SCOPE.md`](SCOPE.md),
+grouped by root cause (CUDA-only kernel, static-shape compile constraint,
+distributed collectives, precision convention, profiling tooling, data
+loading, dev workflow, code hygiene) rather than by framework, since the fix
+pattern repeats within a group. Each row there has a matching
+[GitHub issue](../../issues) so it can be picked up and closed on its own.
+
 ## Status
 
-Scaffolded 2026-10-08. Nothing benchmarked on real TPU hardware yet.
+Scaffolded 2026-10-08. Currently working: Whisper transcription port
+(`torch_xla/whisper_tpu.py`), not yet verified on real TPU hardware.
+Everything else in `SCOPE.md` is tracked as an open issue, not started.
 
 ## Running on Kaggle
 
