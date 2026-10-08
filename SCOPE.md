@@ -2,10 +2,12 @@
 
 **29 rows total (2026-10-08): 10 done / 1 in progress / 3 solution
 identified, not adopted / 1 wontfix / 14 not started.**
-Done = B (5/5), D (2/2), G (1/1), H (2/2) — all code-level, CPU-tested,
-pending real-TPU verification. Not started = all of C/E/F plus 6 of A's 11
-rows; those need either real hardware to measure or a larger adoption
-effort than a dispatch function.
+Done = B (5/5), D (2/2), G (1/1), H (2/2). B1-B4 and H1-H2 are now
+**verified on real TPU hardware** (Colab, TPU v5e-1, 2026-10-08 — see
+`results/colab_run_2026-10-08.md`); D1-D2 are dispatch-only (the pick is
+right, the loop-level behavior it feeds into isn't exercised by this run).
+Not started = all of C/E/F plus 6 of A's 11 rows; those need either real
+hardware to measure or a larger adoption effort than a dispatch function.
 
 Everything below works on a normal NVIDIA GPU and either breaks, doesn't
 exist, or silently falls back to CPU on a TPU. Grouped by *why* it's broken,
@@ -59,11 +61,11 @@ control flow to avoid data-dependent branching.
 
 | Process | Why it breaks on TPU | Fix pattern | Status |
 |---|---|---|---|
-| Autoregressive generation w/ growing KV cache | every new token = new shape = recompile | static-size KV cache buffer + masking, not append-and-grow | done (`tpu_as_gpu.compat.StaticKVCache`, torch/numpy; JAX uses `lax.dynamic_update_slice_in_dim` directly) |
-| Variable-length sequence batching | each batch shape triggers a new compile | bucket into fixed-length bins before batching | done (`tpu_as_gpu.compat.bucket_length`) |
-| `if tensor_value > x:` branching on data | can't trace a Python `if` on a traced value | `jax.lax.cond` / `torch.where`, no data-dependent Python control flow | done (`tpu_as_gpu.compat.where`, dispatches per framework) |
-| `.item()` / `.cpu()` mid-graph sync points | forces a device sync every call — fine occasionally on GPU, very expensive on TPU if done per-step | move sync points outside hot loops, batch them | done (`tpu_as_gpu.compat.DeferredSync`) |
-| Early-stopping / break-on-condition loops | can't break a traced loop on a data value | run fixed iteration count, mask out finished items | done (same `tpu_as_gpu.compat.where`, keyed by a done-mask instead of a condition) |
+| Autoregressive generation w/ growing KV cache | every new token = new shape = recompile | static-size KV cache buffer + masking, not append-and-grow | done, **verified on real TPU** (`tpu_as_gpu.compat.StaticKVCache`, torch/numpy; JAX uses `lax.dynamic_update_slice_in_dim` directly) |
+| Variable-length sequence batching | each batch shape triggers a new compile | bucket into fixed-length bins before batching | done (`tpu_as_gpu.compat.bucket_length`) — pure logic, no device needed, verified on real TPU run anyway |
+| `if tensor_value > x:` branching on data | can't trace a Python `if` on a traced value | `jax.lax.cond` / `torch.where`, no data-dependent Python control flow | done, **verified on real TPU** (`tpu_as_gpu.compat.where`, dispatches per framework) |
+| `.item()` / `.cpu()` mid-graph sync points | forces a device sync every call — fine occasionally on GPU, very expensive on TPU if done per-step | move sync points outside hot loops, batch them | done, **verified on real TPU** (`tpu_as_gpu.compat.DeferredSync`) |
+| Early-stopping / break-on-condition loops | can't break a traced loop on a data value | run fixed iteration count, mask out finished items | done, **verified on real TPU** (same `tpu_as_gpu.compat.where`, keyed by a done-mask instead of a condition) |
 
 ## C. Distributed / multi-device collectives
 
@@ -105,8 +107,8 @@ control flow to avoid data-dependent branching.
 
 | Process | Bad pattern | Fix | Status |
 |---|---|---|---|
-| Device placement | hardcoded `.cuda()` calls scattered through model code instead of a `device` variable | sweep + replace with `xm.xla_device()` / passed-in device, one-time fix per model ported | done (`tpu_as_gpu.device.get_torch_device`) |
-| Seeding/determinism | `torch.cuda.manual_seed` | XLA has its own RNG handling — needs separate seeding path if determinism matters | done (`tpu_as_gpu.seeding.seed_everything`) |
+| Device placement | hardcoded `.cuda()` calls scattered through model code instead of a `device` variable | sweep + replace with `xm.xla_device()` / passed-in device, one-time fix per model ported | done, **verified on real TPU** (`tpu_as_gpu.device.get_torch_device` resolved to `xla:0` on Colab v5e-1) |
+| Seeding/determinism | `torch.cuda.manual_seed` | XLA has its own RNG handling — needs separate seeding path if determinism matters | done, **verified on real TPU** (`tpu_as_gpu.seeding.seed_everything`) |
 
 ## Priority order (suggested, not fixed)
 

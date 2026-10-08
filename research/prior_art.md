@@ -112,6 +112,34 @@ out of that PDF to pin down which op/framework version exactly — flagging
 as a lead, not adding it to `SCOPE.md` as a confirmed row until we hit it
 ourselves or verify the specific claim.
 
+## 6. Environment gotcha confirmed on real hardware: plain `pip install
+   tensorflow` has no TPU kernels on a Colab TPU VM runtime
+
+Found while running `results/colab_run_2026-10-08.md`, not from a paper —
+worth recording here since it's a second data point on top of the Kaggle
+base-image pitfall and shapes what README's framework matrix can claim.
+
+On a Colab TPU v5e-1 runtime: `torch_xla` and `jax` both find and use the
+TPU fine (`libtpu.so` already present, matching `TPU_LIBRARY_PATH`). A
+plain `pip install tensorflow` (2.21.0, exactly matching this runtime's own
+`TPU_ML_PLATFORM_VERSION`) fails with `No OpKernel was registered to
+support Op 'ConfigureDistributedTPU'` — `Registered devices: [CPU]`, i.e.
+the installed wheel has no TPU op kernels compiled in at all, not a
+version/env mismatch (ruled out both `TPUClusterResolver()` and
+`TPUClusterResolver(tpu="local")`, same failure either way).
+
+**Kaggle's TPU VM notebooks ship a TPU-enabled `tensorflow` preinstalled**
+(per `reference_kaggle_api`-style notes and this repo's own
+`examples/tensorflow/requirements.txt` comment) — that's a different,
+Google-built TF wheel than what a plain `pip install tensorflow` gets you
+on Colab. README's framework matrix claim "TF has native TPU support, no
+compat layer needed" is true on Kaggle's image specifically, **not**
+reproduced by a generic pip install elsewhere. Not pursued further this
+session (needs either a TPU-specific TF package/build not identified yet,
+or relying on whatever the host notebook platform preinstalls) — tracked
+as an open question, not a SCOPE.md row (it's an installation/environment
+gap, not a GPU-only code pattern).
+
 ## What this changes in `SCOPE.md`
 
 - Row A2 (fused attention): has a concrete, shipped answer now — Splash

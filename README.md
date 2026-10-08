@@ -51,17 +51,22 @@ pattern repeats within a group. Each row there has a matching
 
 ## Status
 
-As of 2026-10-08: Categories B (static-shape), G (debugging), and H (device
-placement/seeding) are closed at the code level — `src/tpu_as_gpu/` + pure
-control-flow logic, tested on CPU, no hardware needed to verify the logic
-itself. Whisper transcription port (`examples/torch_xla/whisper_tpu.py`) is
-scaffolded, not yet run on real TPU hardware. Category A rows have 2
-upstream solutions identified (Splash Attention, Ragged Paged Attention — see
-`research/prior_art.md`) but not yet adopted. Categories C/D/E/F are
-untouched — they need real TPU hardware to measure (profiling, pipeline
-throughput) or an upstream library to adopt (distributed, precision), not
-just logic. Real-hardware numbers land in `results/` once they exist, never
-claimed before that.
+As of 2026-10-08: Categories B (static-shape) and H (device
+placement/seeding) are **verified on real TPU hardware** — `src/tpu_as_gpu/`
+run against actual `xla:0` tensors on a Colab TPU v5e-1, see
+`results/colab_run_2026-10-08.md`. Category G is a documented pattern, not
+code (`DEBUGGING.md`). Category D (precision) is dispatch-only, not yet
+exercised in a real training loop. Whisper transcription port
+(`examples/torch_xla/whisper_tpu.py`) is scaffolded, not yet run on real TPU
+hardware. Category A rows have 2 upstream solutions identified (Splash
+Attention, Ragged Paged Attention — see `research/prior_art.md`) but not yet
+adopted. Categories C/E/F are untouched — they need real TPU hardware to
+measure (profiling, pipeline throughput) or an upstream library to adopt
+(distributed), not just logic. The same hardware run also surfaced a real
+environment gap: a plain `pip install tensorflow` has no TPU kernels on a
+Colab TPU VM runtime, even with a matched `libtpu` — see
+`research/prior_art.md` §6. Real-hardware numbers land in `results/` once
+they exist, never claimed before that.
 
 ## Running on Kaggle
 
