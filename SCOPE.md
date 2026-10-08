@@ -7,11 +7,20 @@ becomes one helper script/module under the matching framework dir once we
 tackle it.
 
 Status values: `not started` / `in progress` / `done` / `wontfix (reason)`.
+`done` means the code exists and passes its CPU-logic tests under
+`tests/` — Categories B/G/H are pure control-flow/bookkeeping fixes, no
+TPU hardware needed to verify the logic itself. It does NOT mean verified
+against real TPU numbers end to end; that's still pending (see
+`results/README.md`).
 
 See `research/prior_art.md` for what's already been solved upstream (don't
 reimplement a kernel that already ships) and one open architectural
 decision it surfaced: `torch_xla` vs `torchax` as the PyTorch-on-TPU bridge
 for Category A rows — not yet decided.
+
+The installable library living under `src/tpu_as_gpu/` is what the
+"done" rows below actually point at; `examples/<framework>/` holds
+runnable scripts for whatever still needs real TPU hardware to verify.
 
 ## A. CUDA-only kernels — no TPU equivalent exists, needs a different library entirely
 
@@ -43,11 +52,11 @@ control flow to avoid data-dependent branching.
 
 | Process | Why it breaks on TPU | Fix pattern | Status |
 |---|---|---|---|
-| Autoregressive generation w/ growing KV cache | every new token = new shape = recompile | static-size KV cache buffer + masking, not append-and-grow | not started |
-| Variable-length sequence batching | each batch shape triggers a new compile | bucket into fixed-length bins before batching | not started |
-| `if tensor_value > x:` branching on data | can't trace a Python `if` on a traced value | `jax.lax.cond` / `torch.where`, no data-dependent Python control flow | not started |
-| `.item()` / `.cpu()` mid-graph sync points | forces a device sync every call — fine occasionally on GPU, very expensive on TPU if done per-step | move sync points outside hot loops, batch them | not started |
-| Early-stopping / break-on-condition loops | can't break a traced loop on a data value | run fixed iteration count, mask out finished items | not started |
+| Autoregressive generation w/ growing KV cache | every new token = new shape = recompile | static-size KV cache buffer + masking, not append-and-grow | done (`tpu_as_gpu.compat.StaticKVCache`, torch/numpy; JAX uses `lax.dynamic_update_slice_in_dim` directly) |
+| Variable-length sequence batching | each batch shape triggers a new compile | bucket into fixed-length bins before batching | done (`tpu_as_gpu.compat.bucket_length`) |
+| `if tensor_value > x:` branching on data | can't trace a Python `if` on a traced value | `jax.lax.cond` / `torch.where`, no data-dependent Python control flow | done (`tpu_as_gpu.compat.where`, dispatches per framework) |
+| `.item()` / `.cpu()` mid-graph sync points | forces a device sync every call — fine occasionally on GPU, very expensive on TPU if done per-step | move sync points outside hot loops, batch them | done (`tpu_as_gpu.compat.DeferredSync`) |
+| Early-stopping / break-on-condition loops | can't break a traced loop on a data value | run fixed iteration count, mask out finished items | done (same `tpu_as_gpu.compat.where`, keyed by a done-mask instead of a condition) |
 
 ## C. Distributed / multi-device collectives
 
@@ -83,21 +92,20 @@ control flow to avoid data-dependent branching.
 
 | Process | GPU behavior | TPU behavior | Status |
 |---|---|---|---|
-| Inline `print()`/breakpoint on tensor values mid-forward-pass | works immediately, eager execution | shows an unresolved traced value until a sync point (`xm.mark_step()` / `block_until_ready()`) is hit | not started — needs a documented debug pattern, not a script |
+| Inline `print()`/breakpoint on tensor values mid-forward-pass | works immediately, eager execution | shows an unresolved traced value until a sync point (`xm.mark_step()` / `block_until_ready()`) is hit | done — see `DEBUGGING.md`, documented pattern not a script |
 
 ## H. Model-code hygiene (not a feature gap, just bad habits that assume CUDA)
 
 | Process | Bad pattern | Fix | Status |
 |---|---|---|---|
-| Device placement | hardcoded `.cuda()` calls scattered through model code instead of a `device` variable | sweep + replace with `xm.xla_device()` / passed-in device, one-time fix per model ported | not started |
-| Seeding/determinism | `torch.cuda.manual_seed` | XLA has its own RNG handling — needs separate seeding path if determinism matters | not started |
+| Device placement | hardcoded `.cuda()` calls scattered through model code instead of a `device` variable | sweep + replace with `xm.xla_device()` / passed-in device, one-time fix per model ported | done (`tpu_as_gpu.device.get_torch_device`) |
+| Seeding/determinism | `torch.cuda.manual_seed` | XLA has its own RNG handling — needs separate seeding path if determinism matters | done (`tpu_as_gpu.seeding.seed_everything`) |
 
 ## Priority order (suggested, not fixed)
 
 1. **A** (Whisper row is already in progress) — biggest payoff, each one unlocks a whole workload.
-2. **B** — needed for *any* real generation/training workload once you go past the smoke test, this is the thing that actually bites first.
-3. **H** — cheap, mechanical, do it whenever porting an existing model.
-4. **C, D, E, F, G** — as they come up per-workload, not worth front-loading.
+2. **B, H, G** — done at the code level (`tpu_as_gpu` + `DEBUGGING.md`), still need real-TPU verification once hardware access is back.
+3. **C, D, E, F** — as they come up per-workload, needs real TPU hardware to measure (profiling, pipeline throughput) or adopt (distributed, precision).
 
 ## Out of scope
 
