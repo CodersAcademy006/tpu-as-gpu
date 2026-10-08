@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tpu-as-gpu"
+version = "0.1.0"
+description = "Framework-agnostic helpers that port GPU-only code patterns to TPU (torch_xla, JAX, TensorFlow)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Srijan Upadhyay" }]
+dependencies = []
+
+[project.optional-dependencies]
+torch = ["torch"]
+jax = ["jax"]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
