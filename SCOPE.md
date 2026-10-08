@@ -8,6 +8,11 @@ tackle it.
 
 Status values: `not started` / `in progress` / `done` / `wontfix (reason)`.
 
+See `research/prior_art.md` for what's already been solved upstream (don't
+reimplement a kernel that already ships) and one open architectural
+decision it surfaced: `torch_xla` vs `torchax` as the PyTorch-on-TPU bridge
+for Category A rows — not yet decided.
+
 ## A. CUDA-only kernels — no TPU equivalent exists, needs a different library entirely
 
 These aren't "install the right package" gaps — the kernel is written in
@@ -17,9 +22,9 @@ different implementation of the same idea," never "port the kernel."
 | Process | GPU library | TPU replacement | Status |
 |---|---|---|---|
 | Whisper/speech-to-text inference | CTranslate2 (faster-whisper) | `transformers` Whisper on torch_xla | in progress (`torch_xla/whisper_tpu.py`) |
-| Fused attention | FlashAttention / FlashAttention-2 | XLA's own fused attention, or JAX Pallas kernel | not started |
-| Memory-efficient attention | xformers | same as above | not started |
-| LLM inference serving w/ paged KV cache | vLLM (CUDA PagedAttention) | vLLM's TPU backend (Pallas-based, exists upstream) | not started |
+| Fused attention | FlashAttention / FlashAttention-2 | **Splash Attention** — JAX's FlashAttention equivalent, built on Pallas, already lands in JAX itself. See `research/prior_art.md` §3 | not started (solution identified, needs adopting) |
+| Memory-efficient attention | xformers | same as Splash Attention row | not started (solution identified, needs adopting) |
+| LLM inference serving w/ paged KV cache | vLLM (CUDA PagedAttention) | **Ragged Paged Attention v3** inside vLLM's TPU backend (`tpu-inference`), shipped and open source. See `research/prior_art.md` §4 | not started (solution identified, needs adopting) |
 | Quantized local inference | llama.cpp / GGUF | no TPU path at all — needs re-export to a TPU-native format or a different runtime | not started |
 | 4-bit/8-bit quantization | bitsandbytes | no TPU path — needs `optax`/XLA-native quantization or skip quantization on TPU | not started |
 | 8-bit optimizers (Adam8bit, etc.) | bitsandbytes | standard `optax`/torch_xla optimizer, no 8-bit equivalent on TPU | not started |
