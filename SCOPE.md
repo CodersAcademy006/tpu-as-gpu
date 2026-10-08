@@ -41,9 +41,9 @@ different implementation of the same idea," never "port the kernel."
 | Process | GPU library | TPU replacement | Status |
 |---|---|---|---|
 | Whisper/speech-to-text inference | CTranslate2 (faster-whisper) | `transformers` Whisper on torch_xla | done, **verified on real TPU** (`examples/torch_xla/whisper_tpu.py`, Colab v5e-1 2026-10-08 — see `research/prior_art.md` §7 for a real eager-vs-XLA slicing gotcha hit along the way, and the 253.74s first-compile cost as a live data point for row B1) |
-| Fused attention | FlashAttention / FlashAttention-2 | **Splash Attention** — JAX's FlashAttention equivalent, built on Pallas, already lands in JAX itself. See `research/prior_art.md` §3 | not started (solution identified, needs adopting) |
-| Memory-efficient attention | xformers | same as Splash Attention row | not started (solution identified, needs adopting) |
-| LLM inference serving w/ paged KV cache | vLLM (CUDA PagedAttention) | **Ragged Paged Attention v3** inside vLLM's TPU backend (`tpu-inference`), shipped and open source. See `research/prior_art.md` §4 | not started (solution identified, needs adopting) |
+| Fused attention | FlashAttention / FlashAttention-2 | **Splash Attention** — JAX's FlashAttention equivalent, built on Pallas, already lands in JAX itself. See `research/prior_art.md` §3 | not started — API confirmed correct on real hardware (`research/prior_art.md` §8), execution blocked by a Mosaic IR version mismatch (`jax`/`jaxlib` 0.7.2 vs `libtpu` 0.0.21.1), not our code |
+| Memory-efficient attention | xformers | same as Splash Attention row | not started — same blocker as the row above |
+| LLM inference serving w/ paged KV cache | vLLM (CUDA PagedAttention) | **Ragged Paged Attention v3** inside vLLM's TPU backend (`tpu-inference`), shipped and open source. See `research/prior_art.md` §4 | not started — same Mosaic blocker expected (inferred, not independently re-tested — see `research/prior_art.md` §8) |
 | Quantized local inference | llama.cpp / GGUF | no TPU path at all — needs re-export to a TPU-native format or a different runtime | not started |
 | 4-bit/8-bit quantization | bitsandbytes | no TPU path — needs `optax`/XLA-native quantization or skip quantization on TPU | not started |
 | 8-bit optimizers (Adam8bit, etc.) | bitsandbytes | standard `optax`/torch_xla optimizer, no 8-bit equivalent on TPU | not started |

@@ -182,6 +182,63 @@ compile time for the autoregressive generation loop, the exact cost
 generation loop in this repo — that comparison is the natural next
 Category A/Whisper follow-up, not done this session.
 
+## 8. Tried to actually adopt Splash Attention on real hardware — blocked by
+   a Mosaic version mismatch, not our code
+
+With live TPU access (Colab v5e-1, same session as §6/§7), went past
+"solution identified" and tried to actually call Splash Attention, to see
+if rows A2/A3 could move to `done`.
+
+The API is real and matches the signatures found by introspection
+(`jax==0.7.2`, `jaxlib==0.7.2`):
+
+```python
+from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_kernel as splash
+from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_mask as mask_lib
+
+mask = mask_lib.MultiHeadMask(masks=[mask_lib.CausalMask(shape=(seq_len, seq_len))] * num_heads)
+kernel = splash.make_splash_mha_single_device(mask=mask)
+out = jax.jit(kernel)(q, k, v)  # q/k/v: (num_heads, seq_len, head_dim)
+```
+
+The module even ships its own reference implementation
+(`splash.make_attention_reference`) for correctness-checking the kernel
+output — would have been the exact right A/B check.
+
+It didn't run. `jax.jit(kernel)(q, k, v)` (q/k/v: `(4, 128, 64)`, bf16)
+failed with:
+
+```
+XlaRuntimeError: INTERNAL: Failed to deserialize the Mosaic module:
+INTERNAL: Unsupported version: expected <= 7 but got 8
+```
+
+This is a version-skew bug between this JAX build's Pallas/Mosaic compiler
+(which serializes kernels at IR version 8) and the installed
+`libtpu==0.0.21.1` runtime's Mosaic deserializer (which only accepts
+`<= 7`) — confirmed via `pip show jax jaxlib libtpu` on the same session:
+`jax==0.7.2`, `jaxlib==0.7.2`, `libtpu==0.0.21.1`. Not a bug in Splash
+Attention's API or in how it was called — the kernel never got far enough
+to run, it failed at module deserialization.
+
+**Deliberately not attempted**: upgrading/pinning `libtpu` to chase a
+matching version. This session's `torch_xla` and plain `jax` TPU access
+(§6, §7, the B/H verification run) all depend on the exact `libtpu`
+already proven working — risking a version bump mid-session to fix one
+Pallas kernel would have put all of that already-verified work at risk for
+an unconfirmed payoff. `ragged_paged_attention` (SCOPE row A4) lives under
+the same `jax.experimental.pallas.ops.tpu` package and almost certainly
+hits the identical Mosaic deserialization path — inferred, not
+independently re-tested, to avoid the same risk twice for the same root
+cause.
+
+**Status for A2/A3/A4**: still "solution identified, not adopted" — but
+now with the real API confirmed correct and the actual blocker identified
+precisely (a specific version-skew bug, not an unknown). Next attempt
+should happen on a fresh environment where `jax`/`jaxlib`/`libtpu` can be
+pinned to mutually compatible versions from the start, rather than
+patching a running session.
+
 ## What this changes in `SCOPE.md`
 
 - Row A2 (fused attention): has a concrete, shipped answer now — Splash
