@@ -87,8 +87,14 @@ now have a concrete need behind them — not on a schedule, on a trigger.
 - Verify **Qwix** (`google/qwix`) on real TPU hardware before considering
   it a replacement for AQT — AQT's quantized-training path (forward+
   backward) isn't something Qwix's fake-quantization QAT reproduces, so
-  this isn't a drop-in swap even once verified. `research/prior_art.md`
-  §11.1.
+  this isn't a drop-in swap even once verified. **Attempted 2026-10-08,
+  blocked**: `pip install qwix` can't even be imported against the latest
+  flax that satisfies its own declared `flax>=0.12.0` floor
+  (`ImportError: cannot import name 'BaseConfigContext' from
+  'flax.typing'`) — a real bug in qwix's own dependency range, not
+  something to work around from this repo. Revisit when qwix cuts a new
+  release; don't re-attempt against the same flax/qwix pair expecting a
+  different result. `research/prior_art.md` §11.1.
 - Helion as a PyTorch-native alternative to hand-written Pallas for future
   Triton-equivalent kernel work — not attempted yet, just identified as
   the better entry point than raw Pallas. `research/prior_art.md` §11.4.

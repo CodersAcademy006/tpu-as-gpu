@@ -328,10 +328,32 @@ repo — not taken on faith, not dismissed either.
    **Not swapped yet** — `tpu_as_gpu.quantization.quantized_matmul`'s AQT
    path is verified on real TPU hardware (0.91% rel. error, §9); Qwix is
    not. Swapping a verified dependency for an unverified one on a maybe
-   would violate this project's own "verify before acting" rule. Tracked
-   as a follow-up: verify Qwix on real TPU hardware before switching, keep
-   AQT as the working fallback until then. Sources:
+   would violate this project's own "verify before acting" rule. Sources:
    https://github.com/google/qwix, https://qwix.readthedocs.io/
+
+   **Follow-up attempted 2026-10-08 (Colab, v5e-1), blocked — not our
+   bug.** `pip install qwix` (0.1.8) declares `flax>=0.12.0` as its own
+   dependency floor. Installing the latest flax that satisfies that floor
+   (0.12.10) still fails on `import qwix`:
+   ```
+   ImportError: cannot import name 'BaseConfigContext' from 'flax.typing'
+   ```
+   raised inside `qwix/__init__.py` → `qwix.contrib` → `qwix.contrib.gptq`
+   → `flax.nnx.variablelib`, which does `from flax.typing import
+   BaseConfigContext` unconditionally — that name doesn't exist anywhere
+   in `flax.typing` on 0.12.10. Confirmed `BaseConfigContext` isn't a
+   version-skew fluke of this environment: checked `dir(flax.typing)`
+   directly, it's simply absent. Tried pinning flax back to 0.11.2 (below
+   qwix's own stated floor) as a sanity check — different failure
+   (`ImportError: cannot import name 'ndtr' from 'jax._src.lax.special'`,
+   an unrelated transitive pin conflict), confirming 0.11.x isn't a usable
+   downgrade path either. Same failure class as the Splash Attention
+   Mosaic-version-skew block (§8): a real upstream break inside qwix's own
+   declared-compatible dependency range, not something fixable from this
+   repo. Qwix verification stays open; AQT remains the only working path.
+   Environment left on `flax==0.12.10` (qwix's own stated minimum)
+   afterward. Session ended on a Colab TPU-quota wall before a retry was
+   possible.
 
 2. **TorchTPU exists and is Google-announced** — see §2 above, added as a
    third branch in the `torch_xla`/`torchax` decision, explicitly not
