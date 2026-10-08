@@ -22,3 +22,13 @@ def get_torch_device():
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
+
+
+def device_kind(device) -> str:
+    """Returns "xla", "cuda", or "cpu" for any torch-like device object."""
+    s = str(device)
+    if "xla" in s:
+        return "xla"
+    if "cuda" in s:
+        return "cuda"
+    return "cpu"

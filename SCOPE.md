@@ -70,8 +70,8 @@ control flow to avoid data-dependent branching.
 
 | Process | GPU convention | TPU convention | Status |
 |---|---|---|---|
-| Mixed-precision training | fp16 + `torch.cuda.amp.GradScaler` (loss scaling needed, fp16 has narrow range) | bf16, no loss scaling needed (wider dynamic range) — `GradScaler` itself is CUDA-only and won't run | not started |
-| `torch.compile` backend | Inductor (generates Triton/CUDA) | `backend="openxla"` — different compile path entirely | not started |
+| Mixed-precision training | fp16 + `torch.cuda.amp.GradScaler` (loss scaling needed, fp16 has narrow range) | bf16, no loss scaling needed (wider dynamic range) — `GradScaler` itself is CUDA-only and won't run | done (`tpu_as_gpu.precision.autocast_dtype`) — dispatch only, loop-level behavior still needs hardware to verify |
+| `torch.compile` backend | Inductor (generates Triton/CUDA) | `backend="openxla"` — different compile path entirely | done (`tpu_as_gpu.precision.compile_backend`) — dispatch only, compile itself still needs hardware to verify |
 
 ## E. Memory management & profiling tooling
 
