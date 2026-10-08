@@ -21,7 +21,11 @@ Mosaic version-skew bug, not our code (`research/prior_art.md` §8). 8/29
 not started (5 of A's remaining rows, all of C — needs multi-device
 hardware). Beyond the 29 rows: the real mission (any model, not just the
 ones already ported, gets TPU support automatically) is tracked as an
-open backlog in issue #30.
+open backlog in issue #30. See `RESEARCH_DIRECTION.md` for what Stage 1
+still needs before this is a research-grade compatibility layer rather
+than a prototype backlog — capability registry, no-silent-CPU-fallback
+policy, numerical/performance benchmarking — and why most of that is
+deliberately deferred until the function count justifies it.
 
 ## Stage 2 — the auto-detect/auto-rewrite tool
 

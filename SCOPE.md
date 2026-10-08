@@ -26,9 +26,13 @@ against real TPU numbers end to end; that's still pending (see
 `results/README.md`).
 
 See `research/prior_art.md` for what's already been solved upstream (don't
-reimplement a kernel that already ships) and one open architectural
-decision it surfaced: `torch_xla` vs `torchax` as the PyTorch-on-TPU bridge
-for Category A rows — not yet decided.
+reimplement a kernel that already ships) and the open architectural
+decision it surfaced: `torch_xla` vs `torchax` vs (once public) `TorchTPU`
+as the PyTorch-on-TPU bridge for Category A rows — not yet decided. See
+`RESEARCH_DIRECTION.md` for what a research-maturity version of this
+project needs beyond the 29 rows (capability registry, no-silent-fallback
+policy, numerical/performance benchmarking) and why most of it isn't built
+yet — this is a ~10-function library, not a mature compat layer.
 
 The installable library living under `src/tpu_as_gpu/` is what the
 "done" rows below actually point at; `examples/<framework>/` holds
@@ -47,20 +51,26 @@ different implementation of the same idea," never "port the kernel."
 | Memory-efficient attention | xformers | same as Splash Attention row | not started — same blocker as the row above |
 | LLM inference serving w/ paged KV cache | vLLM (CUDA PagedAttention) | **Ragged Paged Attention v3** inside vLLM's TPU backend (`tpu-inference`), shipped and open source. See `research/prior_art.md` §4 | not started — same Mosaic blocker expected (inferred, not independently re-tested — see `research/prior_art.md` §8) |
 | Quantized local inference | llama.cpp / GGUF | no TPU path at all — needs re-export to a TPU-native format or a different runtime | not started |
-| 4-bit/8-bit quantization | bitsandbytes | **AQT** (`google/aqt`, pip `aqtp`) — JAX-native quantized `dot_general`. See `research/prior_art.md` §9 | done, **verified on real TPU** (`tpu_as_gpu.quantization.quantized_matmul`, int8, 0.91% max rel. error vs fp32) — JAX only, no torch_xla-native path identified yet |
+| 4-bit/8-bit quantization | bitsandbytes | **AQT** (`google/aqt`, pip `aqtp`) — JAX-native quantized `dot_general`. See `research/prior_art.md` §9. AQT is end-of-life upstream; **Qwix** (`google/qwix`) is Google's own replacement, confirmed real but not yet verified on our hardware — see §11.1 | done, **verified on real TPU** (`tpu_as_gpu.quantization.quantized_matmul`, int8, 0.91% max rel. error vs fp32) — JAX only, no torch_xla-native path identified yet. Qwix migration is a follow-up, not done — swapping a verified dep for an unverified one isn't justified yet |
 | 8-bit optimizers (Adam8bit, etc.) | bitsandbytes | standard `optax`/torch_xla optimizer, no 8-bit equivalent on TPU | not started — AQT (row above) is activation/weight quantization, not optimizer-state compression; a different problem, not solved by the same library |
 | Custom CUDA ops (NMS, ROI align, deformable conv) | torchvision CUDA kernels | CPU fallback (slow) or XLA-native reimplementation | not started |
 | Arbitrary custom CUDA extensions | `torch.utils.cpp_extension` | full rewrite as XLA op / Pallas kernel, case by case | not started |
-| fp8 training | NVIDIA Transformer Engine (Hopper-only) | no equivalent library — TPU has its own fp8 path, different API | not started |
-| Custom GPU kernels via Triton | OpenAI Triton | no mainstream TPU backend — rewrite in Pallas (JAX) | not started |
+| fp8 training | NVIDIA Transformer Engine (Hopper-only) | generation-dependent, not a flat "no" — TPU7x/Ironwood has **native FP8 hardware** (confirmed, Google Cloud docs, §11.3); v4/v5p emulate it in software. Our test hardware (v5e-1) FP8 status not yet checked | not started — needs checking what this session's actual hardware (v5e-1) supports before picking a path |
+| Custom GPU kernels via Triton | OpenAI Triton | no mainstream TPU backend for Triton itself — options are hand-written Pallas (JAX), or **Helion** (PyTorch's kernel DSL, compiles to Pallas, real measured 838 TFLOPs flash-attention on TPU v7 — §11.4), more PyTorch-native than raw Pallas | not started |
 | Physics sim for RL | Isaac Gym (CUDA/PhysX) | no TPU path — would need a JAX-native sim (e.g. Brax) instead | wontfix (different sim entirely, not a port) |
 
 ## B. Static-shape / compilation constraints — architectural, not a missing library
 
-TPU (XLA) compiles a graph for a fixed shape; GPU (eager execution) doesn't
-care. Anything that changes tensor shape at runtime either recompiles
-(slow) or breaks. Fix pattern: pad/bucket to fixed shapes, or restructure
-control flow to avoid data-dependent branching.
+TPU (XLA) compiles a graph for a *bounded* shape — a dimension can vary but
+needs a known static upper bound, which is still what gets allocated; it
+cannot grow truly unbounded the way GPU eager execution allows (confirmed:
+`torch_xla` added bounded dynamic-shape support, but unbounded dynamism is
+explicitly out of scope of its design — `research/prior_art.md` §11.5,
+not inferred). Anything that changes shape at runtime without a declared
+bound either recompiles (slow) or breaks. Fix pattern: pad/bucket to a
+fixed set of bounds, or restructure control flow to avoid data-dependent
+branching — bucketing by hand and `torch_xla`'s bounded-dynamic-shape API
+are two ways to express the same underlying bound, not competing fixes.
 
 | Process | Why it breaks on TPU | Fix pattern | Status |
 |---|---|---|---|
@@ -115,7 +125,7 @@ control flow to avoid data-dependent branching.
 
 ## Priority order (suggested, not fixed)
 
-1. **A** — A1/Whisper done and verified. A2-A4 (Splash Attention, Ragged Paged Attention) blocked on a Mosaic version-skew bug (`research/prior_art.md` §8), needs a fresh environment with matched `jax`/`jaxlib`/`libtpu` to retry. Remaining 6 rows (quantization, custom kernels, fp8) are standalone adoption efforts, picked up as needed.
+1. **A** — A1/Whisper and A6/quantization done and verified. A2-A4 (Splash Attention, Ragged Paged Attention) blocked on a Mosaic version-skew bug (`research/prior_art.md` §8), needs a fresh environment with matched `jax`/`jaxlib`/`libtpu` to retry. Remaining 5 rows (8-bit optimizers, custom CUDA ops, fp8, Triton/Helion, GGUF local inference) are standalone adoption efforts, picked up as needed.
 2. **B, D, E, F, G, H** — done and mostly real-TPU-verified (D is dispatch-only). No further action needed unless a row's claim turns out wrong in practice.
 3. **C** — blocked on real multi-device hardware (this session only had a single-core v5e-1); revisit when multi-device access exists.
 
@@ -125,3 +135,28 @@ control flow to avoid data-dependent branching.
 - Anything requiring NVIDIA-specific hardware features with no TPU analog at
   all (e.g. Transformer Engine's Hopper-specific fp8 path) stays "wontfix"
   unless a TPU-native equivalent gets named here first.
+
+## I. Inherent accelerator limits — GPU can't do these either, not a TPU gap
+
+Not part of the 29-row count above. The 29 rows are things GPU *does* that
+TPU needs a replacement for. These are things **neither** GPU nor TPU does
+well — both are SIMT/SIMD throughput engines, not general sequential
+processors — so there's no GPU-side version to port from and nothing to
+build here. Listed once so "what can't this hardware class do" has one
+answer instead of getting re-asked per model ported.
+
+| Limit | Why neither GPU nor TPU is good at it |
+|---|---|
+| Branch-heavy / divergent control flow | SIMT: all lanes in a warp run the same instruction; a data-dependent `if` serializes the divergent lanes instead of skipping them |
+| Pointer-chasing / irregular memory (linked lists, graph traversal, trees w/o locality) | Latency-bound random access; both chips are built around high-bandwidth *sequential* memory access, not cache-friendly pointer hopping |
+| Low-latency single sequential dependency chain | Both hide latency by overlapping thousands of independent threads; a lone chain with no parallelism to overlap just pays kernel-launch + sync overhead for nothing |
+| OS-level work: syscalls, filesystem, network stack, interrupts | Neither runs an OS or owns a device; always mediated by the host CPU, no interrupt controller on either |
+| Hard real-time control loops (microsecond-deterministic latency) | Scheduling on both is throughput-optimized, not latency-guaranteed; jitter is a feature of the scheduler, not a bug to patch |
+| Small problem sizes | Kernel-launch + host-device transfer overhead on both dwarfs the compute for small N; CPU just wins below some size threshold |
+| Exact bit-for-bit numeric determinism across runs | Floating-point reduction order depends on how work got split across cores/threads on both; same code, different thread/block count, slightly different rounding |
+| Deep/dynamic recursion, arbitrary heap allocation per thread | Limited per-thread stack on both, no general-purpose `malloc` pattern either is built for |
+| OLTP-style transactional workloads (many small random writes + locking) | No transaction/locking model on either; this is a CPU-and-database problem, not an accelerator problem |
+
+Nothing on this list gets a helper script — there's no "TPU-native fix" for
+a limit the GPU shares. If a future need turns out to actually be
+TPU-specific (not shared with GPU), move it up into Category A-H instead.

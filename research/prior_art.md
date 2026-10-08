@@ -39,11 +39,12 @@ bitsandbytes, vLLM, and autoregressive-generation-at-scale all postdate this
 repo). Useful as a historical data point, not as a template for anything in
 `SCOPE.md` Category A/B/C.
 
-## 2. PyTorch on TPU: two real competing approaches exist, not one
+## 2. PyTorch on TPU: three real paths exist, not one
 
-We picked `torch_xla` for the repo's first pass. Research turned up that
-there's a second, newer, actively-promoted path — worth a conscious
-decision, not a default:
+We picked `torch_xla` for the repo's first pass. Research turned up a
+second, newer path (`torchax`), and — as of this round (2026-10-08,
+verified via web search, not inferred) — a **third**, Google-announced
+but not-yet-public native path. Worth a conscious decision, not a default:
 
 ### `torch_xla` (what we started with)
 Lazy-tensor execution: ops build a graph, `torch_xla.sync()` /
@@ -66,6 +67,29 @@ the JAX ecosystem — including Pallas kernels like Splash Attention (below)
 free; a custom XLA op only exists if someone lowers it for `torch_xla`
 specifically. This is a real fork in the road for how we close Category A
 rows, not a settled question — flagging it, not switching unilaterally.
+
+### `TorchTPU` — Google's announced native path, not yet public/GA
+
+Confirmed real via Google Developers Blog ("TorchTPU: Running PyTorch
+Natively on TPUs at Google Scale") and PyTorch's own Sept/Oct 2026
+conference material — not a rumor, but also **not something we can adopt
+today**: "Once TorchTPU is public it will replace PyTorch/XLA," meaning
+`torch_xla` remains the current supported path until that happens.
+
+Mechanism, for when it matters: built on PyTorch's `PrivateUse1` device
+extension (the same mechanism third-party backends like `cuda`-alternatives
+use), not a compiler-bridge/lazy-tensor trace like `torch_xla` — maps
+PyTorch ops directly to StableHLO, eager-first execution model, goal is
+`tensor.to('tpu')` feeling like `tensor.to('cuda')` with minimal code
+changes. If/when it ships, our `get_torch_device()`/`device_kind()`
+dispatch (`src/tpu_as_gpu/device.py`) is exactly the chokepoint that would
+need a third branch — not a rewrite, one dispatch function already isolates
+this decision from everything else in the library.
+
+**Action taken:** none yet, correctly — nothing to integrate against until
+it's public. Tracked here so the next person doesn't re-discover this from
+scratch. Sources: https://developers.googleblog.com/torchtpu-running-pytorch-natively-on-tpus-at-google-scale/,
+https://github.com/pytorch/xla/blob/master/README.md
 
 ## 3. Fused attention on TPU — already solved, has a name
 
@@ -285,6 +309,79 @@ just that the code ran without erroring), then `model.eval()` +
 Example: `examples/torch_xla/train_infer_demo.py`. Full numbers in
 `results/colab_run_2026-10-08.md`.
 
+## 11. External review (2026-10-08): four claims checked against primary
+    sources, three confirmed and actioned, one confirmed-but-nuanced
+
+A pasted external critique of `SCOPE.md` made several specific factual
+claims. Per this project's verify-before-acting discipline, each
+actionable one was checked against a primary source before touching the
+repo — not taken on faith, not dismissed either.
+
+**Confirmed, actioned:**
+
+1. **AQT is end-of-life, Qwix (`google/qwix`) is Google's own replacement.**
+   Confirmed via the `qwix` repo/docs directly (not the critique's framing
+   of it) — "AQT is reaching end-of-life... Qwix['s] design was inspired by
+   AQT." Real difference, not just a rename: AQT has quantized *training*
+   (quantized forward+backward), Qwix's QAT is fake-quantization only, so
+   it doesn't speed up training the way AQT's int8 `dot_general` does.
+   **Not swapped yet** — `tpu_as_gpu.quantization.quantized_matmul`'s AQT
+   path is verified on real TPU hardware (0.91% rel. error, §9); Qwix is
+   not. Swapping a verified dependency for an unverified one on a maybe
+   would violate this project's own "verify before acting" rule. Tracked
+   as a follow-up: verify Qwix on real TPU hardware before switching, keep
+   AQT as the working fallback until then. Sources:
+   https://github.com/google/qwix, https://qwix.readthedocs.io/
+
+2. **TorchTPU exists and is Google-announced** — see §2 above, added as a
+   third branch in the `torch_xla`/`torchax` decision, explicitly not
+   adopted since it isn't public yet.
+
+3. **TPU7x (Ironwood) has native FP8 hardware.** Confirmed via Google
+   Cloud's own TPU7x docs: "FP8 peak TFlops are emulated for v4 and v5p,
+   but natively supported for Ironwood" — 4614 TFLOPS/chip peak theoretical.
+   This means SCOPE.md row A ("fp8 training... no equivalent library") was
+   **generation-dependent, not universally true** — fixed in SCOPE.md.
+   Our actual test hardware this session was a v5e-1, not TPU7x/Ironwood —
+   whether v5e-1 has any FP8 path (native or emulated) is **not yet
+   checked**, left as an open question rather than assumed either way.
+   Source: https://docs.cloud.google.com/tpu/docs/tpu7x
+
+4. **Helion (PyTorch's kernel-authoring DSL) compiles to Pallas on TPU,
+   with real measured numbers** — 838 TFLOPs (~79% MFU) on a flash
+   attention workload on TPU v7, per PyTorch's own blog with a full
+   methodology writeup, not a marketing number. This is a more
+   PyTorch-native alternative to hand-writing Pallas directly for the
+   Triton→Pallas row (SCOPE.md Category A) — added as a note on that row.
+   Source: https://pytorch.org/blog/helion-on-tpu-towards-hardware-heterogeneous-kernel-authoring/
+
+**Confirmed, but the critique overstated it:**
+
+5. **Dynamic shapes**: the critique said SCOPE.md's "TPU compiles for a
+   fixed shape" framing is outdated because `torch_xla` added dynamic-shape
+   support. True, but incompletely — checked `pytorch/xla`'s own dynamic
+   shape docs: only **bounded** dynamic shape is supported (a dimension can
+   vary but must have a known static upper bound, which is still
+   allocated), not **unbounded** dynamic shape (arbitrary growth, no bound
+   — that's explicitly GPU-only, "out of scope of the current design
+   phase" per PyTorch/XLA's own docs). So: bucketing to a fixed set of
+   bounds is no longer the *only* option, but TPU still fundamentally needs
+   a bound — this isn't the architectural constraint disappearing, it's
+   PyTorch/XLA formalizing what bucketing was already doing by hand.
+   SCOPE.md Category B wording adjusted to say this precisely instead of
+   either the original absolute claim or the critique's overcorrection.
+   Source: https://docs.pytorch.org/xla/release/r2.6/learn/dynamic_shape.html
+
+**Explicitly not actioned — see `RESEARCH_DIRECTION.md`:** the critique's
+remaining ~35 points (capability registry, strict no-fallback policy,
+operator-coverage database, TPU-generation abstraction, cost/performance
+benchmarking framework, portability scoring, etc.) are a legitimate
+research-maturity roadmap, not verifiable-or-not factual claims — recorded
+as forward direction in `RESEARCH_DIRECTION.md` rather than built now.
+Building a capability registry for a library with ~10 functions is
+premature abstraction; the registry earns its keep once there are enough
+dispatch points to actually need one.
+
 ## What this changes in `SCOPE.md`
 
 - Row A2 (fused attention): has a concrete, shipped answer now — Splash
@@ -292,8 +389,16 @@ Example: `examples/torch_xla/train_infer_demo.py`. Full numbers in
 - Row A4 (vLLM paged KV cache): has a concrete, shipped answer — vLLM's
   TPU backend + RPA v3 — same situation, already exists, just needs
   adopting, not building.
-- Open decision, not yet made: whether `torch_xla` or `torchax` is the
-  right default bridge for *future* Category A rows (custom kernels,
-  quantization, etc.), since `torchax` reaches JAX/Pallas kernels directly
-  and `torch_xla` doesn't. Need the user's call before switching the
-  project's stated approach.
+- Row A6 (quantization): AQT verified, Qwix noted as the upstream
+  direction, not yet adopted (§11.1).
+- Row A (fp8): no longer flatly "no equivalent library" — TPU7x/Ironwood
+  has native hardware support, earlier gens emulate it (§11.3).
+- Row A (Triton): Helion→Pallas added as the more PyTorch-native option
+  alongside hand-written Pallas (§11.4).
+- Category B intro: "fixed shape" wording corrected to "bounded shape"
+  (§11.5) — bucketing is still the mechanism, just now also what
+  `torch_xla`'s own bounded-dynamic-shape support does under the hood.
+- Open decision, not yet made: whether `torch_xla`, `torchax`, or (once
+  public) `TorchTPU` is the right default bridge for *future* Category A
+  rows. Need the user's call before switching the project's stated
+  approach.
